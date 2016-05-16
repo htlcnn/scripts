@@ -11,7 +11,7 @@ import requests
 def get_hackerrank_score():
     parser = argparse.ArgumentParser()
     parser.add_argument('users', help='Usernames to get score',
-                        default='hoangthanhlong', nargs='*')
+                        default=['hoangthanhlong'], nargs='*')
 
     args = parser.parse_args()
 
@@ -23,7 +23,7 @@ def get_hackerrank_score():
         if res.status_code == 200:
             for field in res.json():
                 if field['name'] == 'Python':
-                    ret.append('{}: {}'.format(user,
+                    ret.append('{}: {:.0f}'.format(user,
                                                field['practice']['score']))
         else:
             ret.append('{}: Not found'.format(user))
