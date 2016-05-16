@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 '''
 Get Python Archive score on hackerrank
+Usage: hackerrank_score.py user1 user2 ...
 '''
 
 import argparse
