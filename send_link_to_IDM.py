@@ -1,6 +1,6 @@
 '''
 Send links from file.txt to IDM
-file.txt content: http://link - filename
+file.txt content: filename - http://link (' - ' as delimiter)
 '''
 # http://www.internetdownloadmanager.com/support/idm_api.html
 # interface ICIDMLinkTransmitter2 : ICIDMLinkTransmitter
