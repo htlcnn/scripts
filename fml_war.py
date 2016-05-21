@@ -13,26 +13,32 @@ class Character(object):
         self.name = name
         self.health = health
         self.weapon = weapon
-        
+
     def fight(self, character):
         character.health -= self.weapon.damage
-        
+
     def __str__(self):
-        return '{}, Weapon: {}, Health: {}'.format(self.name, self.weapon.name, self.health)
-    
+        return '{}, Weapon: {}, Health: {}'.format(self.name,
+                                                   self.weapon.name,
+                                                   self.health)
+
+
 class Weapon(object):
     def __init__(self, name, damage):
         self.name = name
         self.damage = damage
+
     def __str__(self):
         return '{}, {} dam'.format(self.name, self.damage)
-    
+
+
 def get_random_weapon():
     df = pd.read_html('http://strike-counter.com/cs-go-stats/weapons-data')
     weapon_data = df[0]
     weapon_name = random.choice(weapon_data['Name'])
     weapon_damage = weapon_data[weapon_data['Name'] == weapon_name]['Damage'].values[0]
     return Weapon(weapon_name, weapon_damage)
+
 
 def battle(a, b):
     turns = 0
@@ -43,7 +49,6 @@ def battle(a, b):
         print('{} hit {} with {}'.format(a.name, b.name, a.weapon))
 
         if b.health < 0:
-            winner = a
             b.health = 0
             print(a)
             print(b)
@@ -59,10 +64,11 @@ def battle(a, b):
                 print('{} dead after {} turns'.format(a.name, turns))
                 print('Winner: {}'.format(b))
 
+
 def main():
     char1 = Character('htl', 100, get_random_weapon())
     char2 = Character('hvn', 100, get_random_weapon())
     battle(char1, char2)
-    
+
 if __name__ == '__main__':
     main()
