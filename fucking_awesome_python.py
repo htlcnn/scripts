@@ -56,10 +56,6 @@ def main():
     console_handler.setFormatter(log_formatter)
     logger.addHandler(console_handler)
         
-    # raise api limit from 60 req/h to 5000 req/h, enough for this script
-    token = '11f9f5979c54d52801c9ed70756b2b4cd7a0136b'
-    requests.get('https://api.github.com/user?access_token={}'.format(token)).headers
-    
     # get source readme.md to parse
     res = requests.get('https://raw.githubusercontent.com/vinta/awesome-python/master/README.md')
     
