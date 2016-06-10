@@ -4,6 +4,19 @@ import re
 import requests
 
 
+# logging config
+log_formatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
+logger = logging.getLogger()
+logger.setLevel(logging.DEBUG)
+
+file_handler = logging.FileHandler("{}.log".format(__name__))
+file_handler.setFormatter(log_formatter)
+logger.addHandler(file_handler)
+
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(log_formatter)
+logger.addHandler(console_handler)
+
 def get_star_and_fork(user, repo):
     global logger
     url = 'https://api.github.com/repos/{}/{}?client_id={}&client_secret={}'
@@ -43,18 +56,6 @@ def parse_link(md_links):
     return zip(md_links, parsed_md_links)
 
 def main():
-    # logging config
-    log_formatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
-    logger = logging.getLogger()
-    logger.setLevel(logging.DEBUG)
-    
-    file_handler = logging.FileHandler("{}.log".format(__name__))
-    file_handler.setFormatter(log_formatter)
-    logger.addHandler(file_handler)
-
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(log_formatter)
-    logger.addHandler(console_handler)
         
     # get source readme.md to parse
     res = requests.get('https://raw.githubusercontent.com/vinta/awesome-python/master/README.md')
