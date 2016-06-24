@@ -20,6 +20,8 @@ def main():
     if real_percent < 20 and plugged_in == 'no':
         subprocess.check_output('/usr/bin/notify-send "Battery low: {}%"'.format(real_percent), shell=True)
 
+    print('{}%'.format(real_percent))
+
 if __name__ == '__main__':
     main()
 
