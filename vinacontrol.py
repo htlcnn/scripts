@@ -48,6 +48,3 @@ def main():
         df = df.append(pd.DataFrame([parse_row(row)], columns=columns))
 
     df.to_excel('test.xls')
-
-if __name__=='__main__':
-    main()
