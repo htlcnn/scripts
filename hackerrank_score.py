@@ -18,7 +18,7 @@ def get_hackerrank_score():
     ret = []
 
     for user in args.users:
-        url = 'https://www.hackerrank.com/rest/hackers/{}/scores2'.format(user)
+        url = 'https://www.hackerrank.com/rest/hackers/{}/scores'.format(user)
         res = requests.get(url)
         if res.status_code == 200:
             for field in res.json():
