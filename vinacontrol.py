@@ -24,13 +24,13 @@ def main():
     parser.add_argument('-u', '--username', help='Username')
     parser.add_argument('-p', '--password', help='Password')
     args = parser.parse_args()
-    
+
 
 
     with requests.Session() as s:
         homepage = s.get('http://trithuc.vinacontrol.com.vn/')
         html = lxml.html.fromstring(homepage.text)
-        
+
         payloads = {'name': args.username,
                     'pass': args.username,
                     'form_build_id': html.cssselect('input[name=form_build_id]')[0].attrib['value'],
@@ -48,3 +48,7 @@ def main():
         df = df.append(pd.DataFrame([parse_row(row)], columns=columns))
 
     df.to_excel('test.xls')
+
+
+if __name__ == '__main__':
+    main()
