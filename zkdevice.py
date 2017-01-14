@@ -1,3 +1,22 @@
+'''
+This script will do auto-check in/out for ZMM100 fingerprint access control
+device by ZKSoftware.
+
+At my office, the manager uses an application to load data from the
+fingerprint device. After he loads data, log in device's database is cleared.
+So in my case, I write this script to automate checking in/out everyday.
+
+Device is running linux with busybox, so I have access to ftpput, ftpget and
+wget commands (ftpd is missing). Data is stored in /mnt/mtdblock/data/ZKDB.db.
+This is a sqlite3 database file. User info is in USER_INFO, user transactions
+are in ATT_LOG table.
+
+Procedure:
+- telnet into the device
+- ftpput database file at /mnt/mtdblock/data/ZKDB.db to a temporary FTP server
+- edit ZKDB.db file on server
+- ftpget ZKDB.db from FTP server
+'''
 import datetime
 import os
 import random
