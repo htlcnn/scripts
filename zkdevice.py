@@ -1,124 +1,3 @@
-'''
-This script will do auto-check in/out for ZMM100 fingerprint access control
-device by ZKSoftware.
-
-At my office, the manager uses an application to load data from the
-fingerprint device. After he loads data, log in device's database is cleared.
-So in my case, I write this script to automate checking in/out everyday.
-
-Device is running linux with busybox, so I have access to ftpput, ftpget and
-wget commands (ftpd is missing). Data is stored in /mnt/mtdblock/data/ZKDB.db.
-This is a sqlite3 database file. User info is in USER_INFO, user transactions
-are in ATT_LOG table.
-
-Procedure:
-- telnet into the device
-- ftpput database file at /mnt/mtdblock/data/ZKDB.db to a temporary FTP server
-- edit ZKDB.db file on server
-- ftpget ZKDB.db from FTP server
-'''
-import datetime
-import os
-import random
-import sqlite3
-import subprocess as spr
-import sys
-import telnetlib
-
-
-#====config====
-DEVICE_IP = '10.0.0.204' # todo: find IP, input IP
-DB = 'ZKDB.db'
-DB_PATH = '/mnt/mtdblock/data/ZKDB.db'
-
-
-#====get ftp server IP address====
-try:
-    import netifaces as ni
-except ImportError:
-    import pip
-    pip.main('install netifaces'.split())
-    import netifaces as ni
-
-for i in ni.interfaces():
-    info = ni.ifaddresses(i).get(ni.AF_INET)
-    if info and DEVICE_IP[:DEVICE_IP.rfind('.')] in info[0]['addr']:
-        server_ip = info[0]['addr']
-
-        
-def transfer_file(from_ip, to_ip, file_path, cmd='ftpput'):
-    '''
-    Transfer file from from_ip to to_ip via telnet.
-    cmd is default to ftpput. Change to ftpget if needed.
-    '''
-    #====FTP Server====
-    try:
-        import pyftpdlib
-    except ImportError:
-        import pip
-        pip.main('install pyftpdlib'.split())
-        import pyftpdlib
-
-    # start pyftpdlib FTP server: anonymous with write permission, port 2121    
-    ftp_server = spr.Popen([sys.executable, '-m', 'pyftpdlib', '-w'])
-    print('Server started')
-
-    s = telnetlib.Telnet(DEVICE_IP)
-    s.read_until(b'login: ')
-    s.write(b'root \n')
-    s.read_until(b'Password: ')
-    s.write(b'solokey\n')
-    if s.read_until(b'#'):
-        s.write(bytes('ls %s\n' % DB_PATH, 'utf-8'))
-        files = s.read_until(b'#').decode()
-
-        if DB in files:
-            if cmd == 'ftpput':
-                command = bytes('%s -P 2121 %s %s %s\n' % (cmd, server_ip, DB, DB_PATH), 'utf-8')
-            elif cmd == 'ftpget':
-                command = bytes('%s -P 2121 %s %s %s\n' % (cmd, server_ip, DB_PATH, DB), 'utf-8')
-            s.write(command)
-            print(s.read_until(b'#').decode())
-
-    # stop pyftpdlib FTP server
-    ftp_server.kill()
-    print('Server killed')
-    
-    
-def add_log(uid, date, status):
-    '''
-    Edit ZKDB.db file, ATT_LOG table,
-    insert a row which represents a check in/out log
-    uid: User PIN
-    date: follow format: dd/mm/yyyy - 14/01/2017
-    status: 'in' is checking in, 'out' is checking out
-    '''
-    # verify_type: 0 is password, 1 is fingerprint
-    verify_type = random.randint(0, 1)
-
-    if status == 'in': # check in
-        status = 0
-        hour = 7
-        minute = random.randint(50, 59)
-        second = random.randint(0, 59)
-        time = datetime.time(hour, minute, second)
-        date = datetime.datetime.strptime(date, '%d/%m/%Y')
-        combined = datetime.datetime.combine(date, time)
-        verify_time = datetime.datetime.strftime(combined, '%Y-%m-%dT%H:%M:%S')
-    elif status == 'out': # check out
-        status = 1
-        hour = 17
-        minute = random.randint(0, 19)
-        second = random.randint(0, 59)
-        time = datetime.time(hour, minute, second)
-        date = datetime.datetime.strptime(date, '%d/%m/%Y')
-        combined = datetime.datetime.combine(date, time)
-        verify_time = datetime.datetime.strftime(combined, '%Y-%m-%dT%H:%M:%S')
-
-    with sqlite3.connect(DB) as conn:
-        query = ('INSERT INTO ATT_LOG (User_PIN, Verify_Type, Verify_Time, Status, Work_Code_ID, SEND_FLAG) '
-                 'VALUES ({}, {}, "{}", {}, 0, 0)').format(uid, verify_type, verify_time, status, 0, 0)
-        cur = conn.execute(query)
 import datetime
 import os
 import random
@@ -210,6 +89,8 @@ def add_log(uid, date, status):
         hour = 17
         minute = random.randint(0, 19)
         second = random.randint(0, 59)
+    else:
+        raise 
 
     time = datetime.time(hour, minute, second)
     date = datetime.datetime.strptime(date, '%d/%m/%Y')
@@ -297,3 +178,8 @@ def check_log(log_row):
 
 if __name__ == '__main__':
     pass
+#     transfer_file(DEVICE_IP, server_ip, DB_PATH, cmd='ftpput')
+#     add_log(514, '15/01/2017', 'in')
+#     add_log(516, '15/01/2017', 'in')
+#     transfer_file(server_ip, DEVICE_IP, DB_PATH, cmd='ftpget')
+#     transfer_file(DEVICE_IP, server_ip, DB_PATH, cmd='ftpput')
