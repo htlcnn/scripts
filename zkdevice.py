@@ -90,7 +90,7 @@ def add_log(uid, date, status):
         minute = random.randint(0, 19)
         second = random.randint(0, 59)
     else:
-        raise 
+        raise ValueError('status must be `in` or `out`')
 
     time = datetime.time(hour, minute, second)
     date = datetime.datetime.strptime(date, '%d/%m/%Y')
