@@ -1,3 +1,22 @@
+'''
+This script will do auto-check in/out for ZMM100 fingerprint access control
+device by ZKSoftware.
+
+At my office, the manager uses an application to load data from the
+fingerprint device. After he loads data, log in device's database is cleared.
+So in my case, I write this script to automate checking in/out everyday.
+
+Device is running linux with busybox, so I have access to ftpput, ftpget and
+wget commands (ftpd is missing). Data is stored in /mnt/mtdblock/data/ZKDB.db.
+This is a sqlite3 database file. User info is in USER_INFO, user transactions
+are in ATT_LOG table.
+
+Procedure:
+- telnet into the device
+- ftpput database file at /mnt/mtdblock/data/ZKDB.db to a temporary FTP server
+- edit ZKDB.db file on server
+- ftpget ZKDB.db from FTP server
+'''
 import datetime
 import os
 import random
@@ -14,18 +33,18 @@ DB = 'ZKDB.db'
 DB_PATH = '/mnt/mtdblock/data/ZKDB.db'
 
 
-#====get ftp server IP address====
-try:
-    import netifaces as ni
-except ImportError:
-    import pip
-    pip.main('install netifaces'.split())
-    import netifaces as ni
+def get_server_ip():
+    try:
+        import netifaces as ni
+    except ImportError:
+        import pip
+        pip.main('install netifaces'.split())
+        import netifaces as ni
 
-for i in ni.interfaces():
-    info = ni.ifaddresses(i).get(ni.AF_INET)
-    if info and DEVICE_IP[:DEVICE_IP.rfind('.')] in info[0]['addr']:
-        server_ip = info[0]['addr']
+    for i in ni.interfaces():
+        info = ni.ifaddresses(i).get(ni.AF_INET)
+        if info and DEVICE_IP[:DEVICE_IP.rfind('.')] in info[0]['addr']:
+            return info[0]['addr']
 
         
 def transfer_file(from_ip, to_ip, file_path, cmd='ftpput'):
@@ -33,6 +52,9 @@ def transfer_file(from_ip, to_ip, file_path, cmd='ftpput'):
     Transfer file from from_ip to to_ip via telnet.
     cmd is default to ftpput. Change to ftpget if needed.
     '''
+    
+    server_ip = get_server_ip()
+    
     #====FTP Server====
     try:
         import pyftpdlib
