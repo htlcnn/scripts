@@ -17,6 +17,7 @@ Procedure:
 - edit ZKDB.db file on server
 - ftpget ZKDB.db from FTP server
 '''
+import argparse
 import datetime
 import os
 import random
@@ -24,13 +25,6 @@ import sqlite3
 import subprocess as spr
 import sys
 import telnetlib
-import time
-
-
-#====config====
-DEVICE_IP = '10.0.0.204' # todo: find IP, input IP
-DB = 'ZKDB.db'
-DB_PATH = '/mnt/mtdblock/data/ZKDB.db'
 
 
 def get_server_ip():
@@ -46,27 +40,25 @@ def get_server_ip():
         if info and DEVICE_IP[:DEVICE_IP.rfind('.')] in info[0]['addr']:
             return info[0]['addr']
 
-        
-def transfer_file(from_ip, to_ip, file_path, cmd='ftpput'):
+
+def transfer_file(from_ip, to_ip, remote_file_path, cmd='ftpput'):
     '''
     Transfer file from from_ip to to_ip via telnet.
-    cmd is default to ftpput. Change to ftpget if needed.
+    Use ftpput and ftpget.
+
     '''
-    
-    server_ip = get_server_ip()
-    
-    #====FTP Server====
+
+    # ====FTP Server====
     try:
         import pyftpdlib
     except ImportError:
         import pip
         pip.main('install pyftpdlib'.split())
-        import pyftpdlib
 
-    # start pyftpdlib FTP server: anonymous with write permission, port 2121    
+    # start pyftpdlib FTP server: anonymous with write permission, port 2121
     ftp_server = spr.Popen([sys.executable, '-m', 'pyftpdlib', '-w'])
     print('Server started')
-    time.sleep(1)
+    filename = os.path.basename(remote_file_path)
 
     s = telnetlib.Telnet(DEVICE_IP)
     print(s.read_until(b'login: ').decode())
@@ -77,19 +69,49 @@ def transfer_file(from_ip, to_ip, file_path, cmd='ftpput'):
         s.write(bytes('ls %s\n' % DB_PATH, 'utf-8'))
         files = s.read_until(b'#').decode()
 
-        if DB in files:
-            if cmd == 'ftpput':
-                command = bytes('%s -P 2121 %s %s %s\n' % (cmd, server_ip, DB, DB_PATH), 'utf-8')
-            elif cmd == 'ftpget':
-                command = bytes('%s -P 2121 %s %s %s\n' % (cmd, server_ip, DB_PATH, DB), 'utf-8')
-            s.write(command)
-            print(s.read_until(b'#').decode())
+        if filename in files:
+            while True:
+                if cmd == 'ftpput':
+                    command = bytes('%s -P 2121 %s %s %s\n' % (cmd, server_ip, filename, remote_file_path), 'utf-8')
+                elif cmd == 'ftpget':
+                    command = bytes('%s -P 2121 %s %s %s\n' % (cmd, server_ip, remote_file_path, filename), 'utf-8')
+                else:
+                    raise ValueError('cmd must be `ftpput` or `ftpget`')
+                s.write(command)
+                ret = s.read_until(b'#').decode()
+                if 'refused' not in ret:
+                    print(ret)
+                    break
 
     # stop pyftpdlib FTP server
     ftp_server.kill()
     print('Server killed')
-    
-    
+
+
+def generate_verify_time(status='in'):
+    '''
+    Generate normal verify time based on status `in` or `out`
+    `in` time will be random 10 mins before 8:00
+    `out` time will be random 10 mins after 17:00
+    '''
+    if status == 'in':
+        status = 0
+        hour = 7
+        minute = random.randint(50, 59)
+        second = random.randint(0, 59)
+    elif status == 'out':
+        status = 1
+        hour = 17
+        minute = random.randint(0, 10)
+        second = random.randint(0, 59)
+    else:
+        raise ValueError('status must be `in` or `out`')
+
+    time = datetime.time(hour, minute, second)
+
+    return time
+
+
 def add_log(uid, date, status):
     '''
     Edit ZKDB.db file, ATT_LOG table,
@@ -101,20 +123,15 @@ def add_log(uid, date, status):
     # verify_type: 0 is password, 1 is fingerprint
     verify_type = random.randint(0, 1)
 
-    if status == 'in': # check in
+    if status == 'in':
         status = 0
-        hour = 7
-        minute = random.randint(50, 59)
-        second = random.randint(0, 59)
-    elif status == 'out': # check out
+        time = generate_verify_time('in')
+    elif status == 'out':
         status = 1
-        hour = 17
-        minute = random.randint(0, 19)
-        second = random.randint(0, 59)
+        time = generate_verify_time('out')
     else:
         raise ValueError('status must be `in` or `out`')
 
-    time = datetime.time(hour, minute, second)
     date = datetime.datetime.strptime(date, '%d/%m/%Y')
     combined = datetime.datetime.combine(date, time)
     verify_time = datetime.datetime.strftime(combined, '%Y-%m-%dT%H:%M:%S')
@@ -123,8 +140,10 @@ def add_log(uid, date, status):
         query = ('INSERT INTO ATT_LOG (User_PIN, Verify_Type, Verify_Time, Status, Work_Code_ID, SEND_FLAG) '
                  'VALUES ({}, {}, "{}", {}, 0, 0)').format(uid, verify_type, verify_time, status, 0, 0)
         cur = conn.execute(query)
-        
-    print_log(uid, verify_type, verify_time, status)
+        cur = conn.execute('SELECT last_insert_rowid() FROM ATT_LOG')
+        r = cur.fetchone()
+
+    print_log(r, uid, verify_type, verify_time, status)
 
 
 def delete_log(log_id):
@@ -133,9 +152,10 @@ def delete_log(log_id):
     '''
     with sqlite3.connect(DB) as conn:
         query = ('DELETE FROM ATT_LOG WHERE ID={}'.format(log_id))
-        cur = conn.execute(query)
-    
-    
+        conn.execute(query)
+    print('Deleted log {}'.format(log_id))
+
+
 def get_logs(uid, start_date, end_date):
     '''
     Returns logs of 'uid' from 'start_date' to 'end_date'
@@ -146,36 +166,40 @@ def get_logs(uid, start_date, end_date):
     '''
     start_date = datetime.datetime.strptime(start_date, '%d/%m/%Y')
     end_date = datetime.datetime.strptime(end_date, '%d/%m/%Y')
-    
+
     with sqlite3.connect(DB) as conn:
         query = ('SELECT ID, User_PIN, Verify_Type, Verify_Time, Status FROM ATT_LOG '
-                'WHERE User_PIN = {}'.format(uid))
+                 'WHERE User_PIN = {}'.format(uid))
         cur = conn.execute(query)
         rows = cur.fetchall()
-    
+
     ret = []
     for row in rows:
-        log_date = datetime.datetime.strptime(row[2], '%Y-%m-%dT%H:%M:%S')
+        log_date = datetime.datetime.strptime(row[-2], '%Y-%m-%dT%H:%M:%S')
         if log_date >= start_date and log_date <= end_date + datetime.timedelta(days=1):
             ret.append(row)
     return ret
 
 
+def get_logs_by_date(uid, date):
+    return get_logs(uid, date, date)
+
+
 def print_log(*log_row):
     '''
     Pretty print a log row
-    log row format: (User_PIN, Verify_Type, Verify_Time, Status)
+    log row format: (ID, User_PIN, Verify_Type, Verify_Time, Status)
     '''
-    uid = log_row[0]
-    date = log_row[2]
-    if log_row[-1] == 1:
+    id, uid, verify_type, verify_time, status = log_row
+
+    if status == 1:
         status = 'Check out'
-    elif log_row[-1] == 0:
+    elif status == 0:
         status = 'Check in'
-    print('{} {} at {}'.format(uid, status, date))
+    print('{}. {} {} at {}'.format(id, uid, status, verify_time))
 
 
-def check_log(log_row):
+def check_log_row(log_row):
     '''
     Each day must have exactly 2 logs.
     One for checking in, before 8:00:00
@@ -186,22 +210,91 @@ def check_log(log_row):
     out_time = datetime.time(17, 0, 0)
 
     log_date = datetime.datetime.strptime(log_row[2], '%Y-%m-%dT%H:%M:%S')
+    status = log_row[-1]
 
-
-    if log_row[-1] == 1 and log_date.time() < out_time:
+    if status == 1 and log_date.time() < out_time:
         print('Early log on {}: {}'.format(date.date(), log_date))
         return False
-    elif log_row[-1] == 0 and log_date.time() > in_time:
+    elif status == 0 and log_date.time() > in_time:
         print('Late log on {}: {}'.format(date.date(), log_date))
         return False
     else:
         return True
-    
+
+
+def check_log_by_date():
+    pass
+
+
+def normalize_logs(uid, start_date, end_date):
+    '''
+    Normalize logs of uid from start_date to end_date
+    A normalized log contains 2 logs per day
+    One check in log before 8:00
+    One check out log after 17:00
+    '''
+
+    start_date = datetime.datetime.strptime(start_date, '%d/%m/%Y')
+    end_date = datetime.datetime.strptime(end_date, '%d/%m/%Y')    
+    day_count = (end_date - start_date) + 1
+
+    for date in (start_date + datetime.timedelta(i) for i in range(day_count)):
+        date = datetime.datetime.strftime(date.date, '%d/%m/%Y')
+        logs = get_logs_by_date(uid, date)
+        if len(logs) == 2:
+            if check_log_row(logs[0] == False or check_log_row(logs[1])) == False:
+                delete_log(logs[0][0])
+                delete_log(logs[1][0])
+                add_log(uid, date, 'in')
+                add_log(uid, date, 'out')
+        elif len(logs) == 0:
+            add_log(uid, date, 'in')
+            add_log(uid, date, 'out')
+        else:
+            for log in logs:
+                delete_log(log[0])
+            add_log(uid, date, 'in')
+            add_log(uid, date, 'out')
+
+def main():
+
+    today = datetime.datetime.strftime(datetime.date.today(), '%d/%m/%Y')
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('action', help='`get`, `checkin`, `checkout`, '
+                        '`add` or `normalize` logs', default='check')
+    parser.add_argument('uid', help='User PIN')
+    parser.add_argument('-d', '-s', '--start', help='(Start) date', default=today)
+    parser.add_argument('-e', '--end', help='End date', default=today)
+
+    args = parser.parse_args()
+    uid = args.uid
+    start = args.start
+    end = args.end
+    date = start
+
+    transfer_file(DEVICE_IP, server_ip, DB_PATH, cmd='ftpput')
+
+    if args.action == 'get':
+        print(get_logs(uid, start, end))
+    elif args.action == 'checkin':
+        add_log(uid, date, 'in')
+    elif args.action == 'checkout':
+        add_log(uid, date, 'out')
+    elif args.action == 'add':
+        add_log(uid, start, end)
+    elif args.action == 'normalize':
+        normalize_logs(uid, start, end)
+    else:
+        raise ValueError('Action must be `get`, `checkin`, `checkout` or `normalize`')
+
+    transfer_file(server_ip, DEVICE_IP, DB_PATH, cmd='ftpget')
 
 if __name__ == '__main__':
-    pass
-#     transfer_file(DEVICE_IP, server_ip, DB_PATH, cmd='ftpput')
-#     add_log(514, '15/01/2017', 'in')
-#     add_log(516, '15/01/2017', 'in')
-#     transfer_file(server_ip, DEVICE_IP, DB_PATH, cmd='ftpget')
-#     transfer_file(DEVICE_IP, server_ip, DB_PATH, cmd='ftpput')
+    # ====config====
+    DEVICE_IP = '10.0.0.204'  # todo: find IP, input IP
+    DB_PATH = '/mnt/mtdblock/data/ZKDB.db'
+    DB = os.path.basename(DB_PATH)
+    server_ip = get_server_ip()
+
+    main()
