@@ -88,7 +88,7 @@ def transfer_file(from_ip, to_ip, remote_file_path, cmd='ftpput'):
     print('Server killed')
 
 
-def generate_verify_time(status='in'):
+def generate_verify_time(status='in', late=False):
     '''
     Generate normal verify time based on status `in` or `out`
     `in` time will be random 10 mins before 8:00
@@ -96,23 +96,26 @@ def generate_verify_time(status='in'):
     '''
     if status == 'in':
         status = 0
-        hour = 7
-        minute = random.randint(50, 59)
-        second = random.randint(0, 59)
+        if not late:
+            hour = 7
+            minute = random.randint(50, 59)
+        else:
+            hour = 8
+            minute = random.randint(15, 20)
     elif status == 'out':
         status = 1
         hour = 17
         minute = random.randint(0, 10)
-        second = random.randint(0, 59)
     else:
         raise ValueError('status must be `in` or `out`')
 
+    second = random.randint(0, 59)
     time = datetime.time(hour, minute, second)
 
     return time
 
 
-def add_log(uid, date, status):
+def add_log(uid, date, status, late=True):
     '''
     Edit ZKDB.db file, ATT_LOG table,
     insert a row which represents a check in/out log
@@ -121,11 +124,14 @@ def add_log(uid, date, status):
     status: 'in' is checking in, 'out' is checking out
     '''
     # verify_type: 0 is password, 1 is fingerprint
-    verify_type = random.randint(0, 1)
+    verify_type = 1
 
     if status == 'in':
         status = 0
-        time = generate_verify_time('in')
+        if late:
+            time = generate_verify_time('in', late=True)
+        else:
+            time = generate_verify_time('in')
     elif status == 'out':
         status = 1
         time = generate_verify_time('out')
@@ -168,8 +174,8 @@ def get_logs(uid, start_date, end_date):
     end_date = datetime.datetime.strptime(end_date, '%d/%m/%Y')
 
     with sqlite3.connect(DB) as conn:
-        query = ('SELECT ID, User_PIN, Verify_Type, Verify_Time, Status FROM ATT_LOG '
-                 'WHERE User_PIN = {}'.format(uid))
+        query = ('SELECT ID, User_PIN, Verify_Type, Verify_Time, Status '
+                 'FROM ATT_LOG WHERE User_PIN = {}'.format(uid))
         cur = conn.execute(query)
         rows = cur.fetchall()
 
@@ -213,36 +219,36 @@ def check_log_row(log_row):
     status = log_row[-1]
 
     if status == 1 and log_date.time() < out_time:
-        print('Early log on {}: {}'.format(date.date(), log_date))
+        print('Early log on {}: {}'.format(log_date.date(), log_date))
         return False
     elif status == 0 and log_date.time() > in_time:
-        print('Late log on {}: {}'.format(date.date(), log_date))
+        print('Late log on {}: {}'.format(log_date.date(), log_date))
         return False
     else:
         return True
 
 
-def check_log_by_date():
+def check_log_by_date(uid, date):
     pass
 
 
-def normalize_logs(uid, start_date, end_date):
+def fix_logs(uid, start_date, end_date):
     '''
-    Normalize logs of uid from start_date to end_date
+    Fix logs of uid from start_date to end_date
     A normalized log contains 2 logs per day
     One check in log before 8:00
     One check out log after 17:00
     '''
 
     start_date = datetime.datetime.strptime(start_date, '%d/%m/%Y')
-    end_date = datetime.datetime.strptime(end_date, '%d/%m/%Y')    
+    end_date = datetime.datetime.strptime(end_date, '%d/%m/%Y')
     day_count = (end_date - start_date) + 1
 
     for date in (start_date + datetime.timedelta(i) for i in range(day_count)):
         date = datetime.datetime.strftime(date.date, '%d/%m/%Y')
         logs = get_logs_by_date(uid, date)
         if len(logs) == 2:
-            if check_log_row(logs[0] == False or check_log_row(logs[1])) == False:
+            if not check_log_row(logs[0]) or not check_log_row(logs[1]):
                 delete_log(logs[0][0])
                 delete_log(logs[1][0])
                 add_log(uid, date, 'in')
@@ -256,39 +262,53 @@ def normalize_logs(uid, start_date, end_date):
             add_log(uid, date, 'in')
             add_log(uid, date, 'out')
 
+
 def main():
 
     today = datetime.datetime.strftime(datetime.date.today(), '%d/%m/%Y')
 
     parser = argparse.ArgumentParser()
     parser.add_argument('action', help='`get`, `checkin`, `checkout`, '
-                        '`add` or `normalize` logs', default='check')
-    parser.add_argument('uid', help='User PIN')
-    parser.add_argument('-d', '-s', '--start', help='(Start) date', default=today)
-    parser.add_argument('-e', '--end', help='End date', default=today)
+                        '`add` or `fix` logs', default='get')
+    parser.add_argument('uid', help='User PIN', type=int)
+    parser.add_argument('-d', '--date', help='Date', default=today)
+    parser.add_argument('-r', '--range', help='Range of date, ex. 01/01/2017-02/01/2017')
+    parser.add_argument('--log', help='log id to delete')
+    parser.add_argument('--late', help='Checkin late or not', action='store_true')
 
     args = parser.parse_args()
     uid = args.uid
-    start = args.start
-    end = args.end
-    date = start
+    date = args.date or today
+    if not args.range:
+        start, end = date, date
+    else:
+        start, end = args.range.split('-')
 
     transfer_file(DEVICE_IP, server_ip, DB_PATH, cmd='ftpput')
 
     if args.action == 'get':
-        print(get_logs(uid, start, end))
+        logs = get_logs(uid, start, end)
+        for log in logs:
+            print_log(*log)
     elif args.action == 'checkin':
-        add_log(uid, date, 'in')
+        if args.late:
+            add_log(uid, date, 'in', late=True)
+        else:
+            add_log(uid, date, 'in')
     elif args.action == 'checkout':
         add_log(uid, date, 'out')
     elif args.action == 'add':
         add_log(uid, start, end)
-    elif args.action == 'normalize':
-        normalize_logs(uid, start, end)
+    elif args.action == 'fix':
+        fix_logs(uid, start, end)
+    elif args.action == 'delete':
+        delete_log(args.log)
     else:
-        raise ValueError('Action must be `get`, `checkin`, `checkout` or `normalize`')
+        raise ValueError('Action must be `get`, `checkin`, `checkout`, '
+                         '`fix` or `delete`')
 
     transfer_file(server_ip, DEVICE_IP, DB_PATH, cmd='ftpget')
+
 
 if __name__ == '__main__':
     # ====config====
