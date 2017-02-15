@@ -115,7 +115,7 @@ def generate_verify_time(status='in', late=False):
     return time
 
 
-def add_log(uid, date, status, late=True):
+def add_log(uid, date, status, late=False):
     '''
     Edit ZKDB.db file, ATT_LOG table,
     insert a row which represents a check in/out log
@@ -128,10 +128,8 @@ def add_log(uid, date, status, late=True):
 
     if status == 'in':
         status = 0
-        if late:
-            time = generate_verify_time('in', late=True)
-        else:
-            time = generate_verify_time('in')
+        time = generate_verify_time('in', late=late)
+
     elif status == 'out':
         status = 1
         time = generate_verify_time('out')
@@ -291,10 +289,7 @@ def main():
         for log in logs:
             print_log(*log)
     elif args.action == 'checkin':
-        if args.late:
-            add_log(uid, date, 'in', late=True)
-        else:
-            add_log(uid, date, 'in')
+        add_log(uid, date, 'in', late=args.late)
     elif args.action == 'checkout':
         add_log(uid, date, 'out')
     elif args.action == 'add':
