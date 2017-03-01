@@ -27,18 +27,12 @@ import sys
 import telnetlib
 
 
-def get_server_ip():
-    try:
-        import netifaces as ni
-    except ImportError:
-        import pip
-        pip.main('install netifaces'.split())
-        import netifaces as ni
-
-    for i in ni.interfaces():
-        info = ni.ifaddresses(i).get(ni.AF_INET)
-        if info and DEVICE_IP[:DEVICE_IP.rfind('.')] in info[0]['addr']:
-            return info[0]['addr']
+def get_server_ip(device_ip):
+    import socket
+    
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.connect((device_ip, 80))
+    return s.getsockname()[0]
 
 
 def transfer_file(from_ip, to_ip, remote_file_path, cmd='ftpput'):
@@ -72,7 +66,10 @@ def transfer_file(from_ip, to_ip, remote_file_path, cmd='ftpput'):
         if filename in files:
             while True:
                 if cmd == 'ftpput':
-                    command = bytes('%s -P 2121 %s %s %s\n' % (cmd, server_ip, filename, remote_file_path), 'utf-8')
+                    command = bytes('%s -P 2121 %s %s %s\n' % (cmd, server_ip,
+                                                               filename,
+                                                               remote_file_path),
+                                    'utf-8')
                 elif cmd == 'ftpget':
                     command = bytes('%s -P 2121 %s %s %s\n' % (cmd, server_ip, remote_file_path, filename), 'utf-8')
                 else:
@@ -138,11 +135,14 @@ def add_log(uid, date, status, late=False):
 
     date = datetime.datetime.strptime(date, '%d/%m/%Y')
     combined = datetime.datetime.combine(date, time)
-    verify_time = datetime.datetime.strftime(combined, '%Y-%m-%dT%H:%M:%S')
+    verify_time = '{:%Y-%m-%dT%H:%M:%S}'.format(combined)
 
     with sqlite3.connect(DB) as conn:
-        query = ('INSERT INTO ATT_LOG (User_PIN, Verify_Type, Verify_Time, Status, Work_Code_ID, SEND_FLAG) '
-                 'VALUES ({}, {}, "{}", {}, 0, 0)').format(uid, verify_type, verify_time, status, 0, 0)
+        query = ('INSERT INTO ATT_LOG (User_PIN, Verify_Type, Verify_Time, '
+                 'Status, Work_Code_ID, SEND_FLAG) '
+                 'VALUES ({}, {}, "{}", {}, 0, 0)').format(uid, verify_type,
+                                                           verify_time, status,
+                                                           0, 0)
         cur = conn.execute(query)
         cur = conn.execute('SELECT last_insert_rowid() FROM ATT_LOG')
         r = cur.fetchone()
@@ -238,12 +238,12 @@ def fix_logs(uid, start_date, end_date):
     One check out log after 17:00
     '''
 
-    start_date = datetime.datetime.strptime(start_date, '%d/%m/%Y')
-    end_date = datetime.datetime.strptime(end_date, '%d/%m/%Y')
+    start_date = '{:%d/%m/%Y}'.format(start_date)
+    end_date = '{:%d/%m/%Y}'.format(end_date)
     day_count = (end_date - start_date) + 1
 
     for date in (start_date + datetime.timedelta(i) for i in range(day_count)):
-        date = datetime.datetime.strftime(date.date, '%d/%m/%Y')
+        date = '{:%d/%m/%Y}'.format(date.date)
         logs = get_logs_by_date(uid, date)
         if len(logs) == 2:
             if not check_log_row(logs[0]) or not check_log_row(logs[1]):
@@ -263,19 +263,21 @@ def fix_logs(uid, start_date, end_date):
 
 def main():
 
-    today = datetime.datetime.strftime(datetime.date.today(), '%d/%m/%Y')
+    today = '{:%d/%m/%Y}'.format(datetime.date.today())
 
     parser = argparse.ArgumentParser()
     parser.add_argument('action', help='`get`, `checkin`, `checkout`, '
                         '`add` or `fix` logs', default='get')
-    parser.add_argument('uid', help='User PIN', type=int)
+    parser.add_argument('uids', help='User PINs', type=int, nargs='*')
     parser.add_argument('-d', '--date', help='Date', default=today)
-    parser.add_argument('-r', '--range', help='Range of date, ex. 01/01/2017-02/01/2017')
+    parser.add_argument('-r', '--range',
+                        help='Range of date, ex. 01/01/2017-02/01/2017')
     parser.add_argument('--log', help='log id to delete')
-    parser.add_argument('--late', help='Checkin late or not', action='store_true')
+    parser.add_argument('--late', help='Checkin late or not',
+                        action='store_true')
 
     args = parser.parse_args()
-    uid = args.uid
+    uids = args.uids
     date = args.date or today
     if not args.range:
         start, end = date, date
@@ -284,23 +286,24 @@ def main():
 
     transfer_file(DEVICE_IP, server_ip, DB_PATH, cmd='ftpput')
 
-    if args.action == 'get':
-        logs = get_logs(uid, start, end)
-        for log in logs:
-            print_log(*log)
-    elif args.action == 'checkin':
-        add_log(uid, date, 'in', late=args.late)
-    elif args.action == 'checkout':
-        add_log(uid, date, 'out')
-    elif args.action == 'add':
-        add_log(uid, start, end)
-    elif args.action == 'fix':
-        fix_logs(uid, start, end)
-    elif args.action == 'delete':
-        delete_log(args.log)
-    else:
-        raise ValueError('Action must be `get`, `checkin`, `checkout`, '
-                         '`fix` or `delete`')
+    for uid in uids:
+        if args.action == 'get':
+            logs = get_logs(uid, start, end)
+            for log in logs:
+                print_log(*log)
+        elif args.action == 'checkin':
+            add_log(uid, date, 'in', late=args.late)
+        elif args.action == 'checkout':
+            add_log(uid, date, 'out')
+        elif args.action == 'add':
+            add_log(uid, start, end)
+        elif args.action == 'fix':
+            fix_logs(uid, start, end)
+        elif args.action == 'delete':
+            delete_log(args.log)
+        else:
+            raise ValueError('Action must be `get`, `checkin`, `checkout`, '
+                             '`fix` or `delete`')
 
     transfer_file(server_ip, DEVICE_IP, DB_PATH, cmd='ftpget')
 
@@ -310,6 +313,6 @@ if __name__ == '__main__':
     DEVICE_IP = '10.0.0.204'  # todo: find IP, input IP
     DB_PATH = '/mnt/mtdblock/data/ZKDB.db'
     DB = os.path.basename(DB_PATH)
-    server_ip = get_server_ip()
+    server_ip = get_server_ip(DEVICE_IP)
 
     main()
