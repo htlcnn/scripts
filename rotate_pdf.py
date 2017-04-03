@@ -3,7 +3,7 @@ A script to rotate my pdf files created from the scanner.
 I use Fuji Xerox Docucentre 4070-IV to scan my documents with duplex mode.
 In order to speed up the scanning job, I rotate the original documents so that
 the scanner rolls along the short side of the paper. The output pdf will be
-rotated -90 and -270 degree one after each other. So I wrote this script to
+rotated -90 and -270 degree one page after each other. So I wrote this script to
 mass rotate pdf files in a folder. You might customize it to your own use.
 Usage:
     python rotate_pdf.py [-f folder_path] [--all 0]  [--odd 0] [--even 0]
