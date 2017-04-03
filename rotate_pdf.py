@@ -8,9 +8,9 @@ to mass rotate pdf files in a folder. You might customize it to your own use.
 Usage:
     python rotate_pdf.py [-f folder_path] [--all 0]  [--odd 0] [--even 0]
     f: Path of folder that your pdf files reside, default current folder
-    all: degree to rotate all pages
-    odd: degree to rotate odd pages
-    even: degree to rotate even pages
+    all: degree to rotate all pages, defaults to 0
+    odd: degree to rotate odd pages, defaults to 90
+    even: degree to rotate even pages, defaults to 270
 '''
 import argparse
 import os
@@ -60,9 +60,9 @@ def main():
     parser.add_argument('--all', help='Rotate all pages by x degree',
                         type=int, default=0)
     parser.add_argument('--odd', help='Rotate odd pages by x degree',
-                        type=int, default=0)
+                        type=int, default=90)
     parser.add_argument('--even', help='Rotate even pages by x degree',
-                        type=int, default=0)
+                        type=int, default=270)
 
     args = parser.parse_args()
     rotate_pdf(folder=args.folder,
