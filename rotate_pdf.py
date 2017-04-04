@@ -1,6 +1,6 @@
 '''
 A script to rotate my pdf files created from the scanner.
-I use Fuji Xerox Docucentre 4070-IV to scan my documents with duplex mode.
+I use Fuji Xerox Docucentre-IV 4070 to scan my documents with duplex mode.
 In order to speed up the scanning job, I rotate the original documents so that
 the scanner rolls along the short side of the paper. The output pdf will be
 rotated -90 and -270 degree one page after each other. So I wrote this script
