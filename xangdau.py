@@ -1,8 +1,3 @@
-'''
-Lấy giá xăng dầu vùng 1.
-Yêu cầu input 1 link trên xangdau.net
-Todo: Tự động cập nhật để gửi email giá mới nhất
-'''
 import argparse
 import re
 
