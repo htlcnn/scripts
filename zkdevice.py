@@ -29,7 +29,7 @@ import telnetlib
 
 def get_server_ip(device_ip):
     import socket
-    
+
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s.connect((device_ip, 80))
     return s.getsockname()[0]
@@ -148,6 +148,15 @@ def add_log(uid, date, status, late=False):
         r = cur.fetchone()
 
     print_log(r, uid, verify_type, verify_time, status)
+
+def add_logs(uid, start, end, status, late=False):
+    start_date = datetime.datetime.strptime(start, '%d/%m/%Y')
+    end_date = datetime.datetime.strptime(end, '%d/%m/%Y')
+    day_count = end_date - start_date
+    day_count = day_count.days + 1
+    for date in (start_date + datetime.timedelta(i) for i in range(day_count)):
+        date = '{:%d/%m/%Y}'.format(date)
+        add_log(uid, date, status, late)
 
 
 def delete_log(log_id):
@@ -292,9 +301,9 @@ def main():
             for log in logs:
                 print_log(*log)
         elif args.action == 'checkin':
-            add_log(uid, date, 'in', late=args.late)
+            add_logs(uid, start, end, 'in', late=args.late)
         elif args.action == 'checkout':
-            add_log(uid, date, 'out')
+            add_logs(uid, start, end, 'out')
         elif args.action == 'add':
             add_log(uid, start, end)
         elif args.action == 'fix':
